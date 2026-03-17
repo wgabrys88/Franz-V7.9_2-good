@@ -1,5 +1,5 @@
 
-
+```
 # Final Re-Evaluation + README.md
 
 ## Re-Evaluation Cross-Reference (New Codebase, All 5 Files)
@@ -20,12 +20,9 @@ After tracing all five files one more time against the logs and each other:
 | H | **interact.js CDN has no version pin** — uses bare path, could break on major version change | panel.html script import | Low |
 | I | **Panel positions reset on page reload** — inline style initial positions, no localStorage persistence | panel.html | Low |
 | J | **Replay mode fires handleAnnotation wastefully** — `isLive` check was added but need to verify SSE error path sets `isLive=false` correctly in replay (no SSE in replay → EventSource onerror fires → `isLive=false` ✓) | panel.html | Low (fixed) |
-
+```
 ---
 
-## README.md
-
-````markdown
 # Autonomous Agent Platform — VLM-Driven Computer Control
 
 > A platform where vision-language models physically control a Windows 11 PC
@@ -509,4 +506,3 @@ Cite exact file:line and quote code for every claim.
 
 This project is experimental research software. Use at your own risk.
 It will move your mouse and type on your keyboard.
-````
