@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Panel</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/MotionPathPlugin.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.27/dist/interact.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0c;--surface:#131318;--border:#252530;--muted:#555568;
+  --text:#e0e0ea;--blue:#4a9eff;--red:#ff4455;--green:#3ecf8e;
+  --purple:#c084fc;--orange:#f0a000;--yellow:#f97316;
+  --mono:"Cascadia Code","Fira Code","Consolas",monospace;
+  --fs:11px;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--mono);
+  font-size:var(--fs);width:100vw;height:100vh;overflow:hidden;color-scheme:dark}
+
+#root{position:relative;width:100vw;height:100vh}
+
+.main-panel{position:absolute;background:var(--surface);border:1px solid var(--border);
+  border-radius:6px;overflow:hidden;display:flex;flex-direction:column;
+  touch-action:none;min-width:200px;min-height:80px}
+.main-panel>.panel-grip{padding:4px 10px;background:#1a1a22;border-bottom:1px solid var(--border);
+  font-size:10px;font-weight:700;color:var(--muted);flex-shrink:0;cursor:grab;
+  display:flex;align-items:center;gap:8px;user-select:none}
+.main-panel>.panel-grip .dot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;
+  transition:background .3s}
+.main-panel>.panel-grip .dot.live{background:var(--green)}
+.main-panel>.panel-body{flex:1;overflow:auto;position:relative}
+.resize-handle{position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;
+  background:linear-gradient(135deg,transparent 50%,var(--border) 50%);border-radius:0 0 6px 0}
+
+#diagram{z-index:1}
+#diagram>.panel-body{
+  background:
+    radial-gradient(circle,#1a1a24 1px,transparent 1px),
+    var(--surface);
+  background-size:20px 20px;
+}
+#diagram svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+
+#agents-panel{z-index:2}
+#agents-wrap{display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:6px;align-content:start;padding:6px}
+
+#elog-panel{z-index:3}
+#elog-list{padding:2px 0}
+.lr{display:flex;gap:8px;padding:2px 8px;border-bottom:1px solid #111118;font-size:9px;
+  flex-wrap:wrap;min-height:18px;align-items:baseline}
+.lr.err{color:var(--red)}
+.lr-t{color:var(--muted);flex-shrink:0;min-width:62px}
+.lr-e{color:var(--blue);flex-shrink:0;min-width:110px}
+.lr-a{color:var(--green);flex-shrink:0;min-width:60px}
+.lr-r{color:#888890;flex-shrink:0;min-width:80px;font-size:8px;word-break:break-all}
+.lr-l{color:#b0b0c0;flex:1;word-break:break-word;white-space:pre-wrap}
+.lr-f{display:flex;gap:4px;flex-basis:100%;padding-left:62px;font-size:8px;color:#666680;
+  word-break:break-all;white-space:pre-wrap}
+
+.chip{background:var(--surface);border:1.5px solid var(--border);border-radius:6px;
+  display:flex;flex-direction:column;overflow:hidden;position:relative;min-width:0}
+.chip-head{display:flex;align-items:center;gap:4px;padding:4px 8px;
+  background:#1a1a22;border-bottom:1px solid var(--border);flex-shrink:0;cursor:pointer;user-select:none}
+.chip-pill{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 8px;border-radius:6px}
+.chip-ts{font-size:8px;color:var(--muted);margin-left:auto}
+.chip-collapse{font-size:8px;color:var(--muted);margin-left:4px}
+
+.chip.agent .imgs{display:flex;flex:0 0 auto;min-height:24px;overflow:hidden;background:var(--bg)}
+.img-half{flex:1;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;position:relative;padding:2px;cursor:pointer}
+.img-half:first-child{border-right:1px solid var(--border)}
+.img-half img{max-width:100%;max-height:100%;object-fit:contain;display:none}
+.img-half .tag{position:absolute;top:2px;left:4px;font-size:7px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;pointer-events:none}
+.img-half .ph{color:var(--border);font-size:8px}
+
+.pane{padding:3px 7px;font-size:9px;line-height:1.5;white-space:pre-wrap;
+  word-break:break-word;border-bottom:1px solid var(--border);min-height:16px;
+  max-height:200px;overflow-y:auto}
+.pane.sys{color:#a78bfa;background:rgba(167,139,250,0.04)}
+.pane.usr{color:#60a5fa;background:rgba(96,165,250,0.04)}
+.pane.reply{color:#34d399;background:rgba(52,211,153,0.04)}
+.pane .ph{color:var(--border)}
+.pane-label{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;
+  padding:1px 7px;flex-shrink:0}
+
+.fr-badge{display:inline-block;font-size:7px;padding:0 5px;border-radius:3px;
+  margin-left:6px;font-weight:700;vertical-align:middle}
+.fr-badge.stop{background:rgba(52,211,153,0.2);color:var(--green)}
+.fr-badge.length{background:rgba(255,68,85,0.2);color:var(--red)}
+.fr-badge.error{background:rgba(255,68,85,0.3);color:var(--red)}
+.fr-badge.unknown{background:rgba(136,136,160,0.2);color:#8888a0}
+
+.node-box{position:absolute;background:var(--surface);border:1.5px solid var(--border);
+  border-radius:6px;padding:6px 10px;font-size:10px;font-weight:700;
+  text-align:center;cursor:grab;transition:border-color .3s;min-width:80px;
+  white-space:nowrap;z-index:2;touch-action:none}
+.node-box.active{border-color:var(--blue)}
+.node-box.err{border-color:var(--red)}
+
+.chip-content{overflow:hidden;transition:max-height .3s ease}
+.chip-content.collapsed{max-height:0 !important;overflow:hidden}
+
+#img-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.85);
+  display:none;z-index:1000;align-items:center;justify-content:center;cursor:zoom-out}
+#img-overlay img{max-width:95vw;max-height:95vh;object-fit:contain}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+svg .wire{pointer-events:none}
+</style>
+</head>
+<body>
+
+<div id="root">
+  <div class="main-panel" id="diagram" style="left:6px;top:6px;width:calc(100vw - 12px);height:50vh">
+    <div class="panel-grip">⬡ TOPOLOGY</div>
+    <div class="panel-body">
+      <svg id="wires" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+            <polygon points="0 0,7 2.5,0 5" fill="#555568"/>
+          </marker>
+          <marker id="ah-b" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+            <polygon points="0 0,7 2.5,0 5" fill="#4a9eff"/>
+          </marker>
+          <marker id="ah-r" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+            <polygon points="0 0,7 2.5,0 5" fill="#ff4455"/>
+          </marker>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+      </svg>
+    </div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <div class="main-panel" id="agents-panel" style="left:6px;top:calc(50vh + 12px);width:calc(100vw - 12px);height:25vh">
+    <div class="panel-grip">⬢ AGENTS</div>
+    <div class="panel-body"><div id="agents-wrap"></div></div>
+    <div class="resize-handle"></div>
+  </div>
+
+  <div class="main-panel" id="elog-panel" style="left:6px;top:calc(75vh + 18px);width:calc(100vw - 12px);height:calc(25vh - 24px)">
+    <div class="panel-grip"><span class="dot" id="cdot"></span>EVENT LOG</div>
+    <div class="panel-body"><div id="elog-list"></div></div>
+    <div class="resize-handle"></div>
+  </div>
+</div>
+
+<div id="img-overlay"><img id="img-overlay-img" alt=""/></div>
+
+<script type="module">
+gsap.registerPlugin(MotionPathPlugin);
+
+const PANEL = location.protocol === 'file:' ? 'http://127.0.0.1:1236' : '';
+const COLORS = ['#f97316','#a3e635','#ff4455','#4a9eff','#c084fc','#06b6d4','#3ecf8e','#f0a000'];
+let colorIdx = 0;
+const colorMap = new Map();
+const nodeColor = name => {
+  if (!colorMap.has(name)) colorMap.set(name, COLORS[colorIdx++ % COLORS.length]);
+  return colorMap.get(name);
+};
+
+const $diagramBody = document.querySelector('#diagram > .panel-body');
+const $wires = document.getElementById('wires');
+const $agents = document.getElementById('agents-wrap');
+const $logList = document.getElementById('elog-list');
+const $cdot = document.getElementById('cdot');
+const $overlay = document.getElementById('img-overlay');
+const $overlayImg = document.getElementById('img-overlay-img');
+
+const nodes = new Map();
+const edges = new Map();
+const agentChips = new Map();
+const agentState = new Map();
+
+let pollCursor = {batch: '', line: 0};
+let allBatches = [];
+let elk = null;
+let layoutPending = false;
+let pendingAnnotations = new Set();
+let isLive = false;
+
+try { elk = new ELK(); } catch(e) { elk = null; }
+
+interact('.main-panel').draggable({
+  allowFrom: '.panel-grip',
+  listeners: {
+    move(event) {
+      const t = event.target;
+      const x = (parseFloat(t.style.left) || 0) + event.dx;
+      const y = (parseFloat(t.style.top) || 0) + event.dy;
+      t.style.left = x + 'px';
+      t.style.top = y + 'px';
+    }
+  }
+}).resizable({
+  edges: {bottom: '.resize-handle', right: '.resize-handle'},
+  listeners: {
+    move(event) {
+      const t = event.target;
+      t.style.width = event.rect.width + 'px';
+      t.style.height = event.rect.height + 'px';
+    }
+  },
+  modifiers: [interact.modifiers.restrictSize({min: {width: 200, height: 80}})]
+});
+
+function ensureNode(id) {
+  if (!id || nodes.has(id)) return;
+  nodes.set(id, {id, el: null, x: 0, y: 0, w: 90, h: 32});
+  const box = document.createElement('div');
+  box.className = 'node-box';
+  box.textContent = id;
+  box.style.borderColor = nodeColor(id);
+  box.style.color = nodeColor(id);
+  $diagramBody.appendChild(box);
+  nodes.get(id).el = box;
+  layoutPending = true;
+
+  interact(box).draggable({
+    listeners: {
+      move(event) {
+        const n = nodes.get(id);
+        if (!n) return;
+        n.x += event.dx;
+        n.y += event.dy;
+        n.el.style.left = n.x + 'px';
+        n.el.style.top = n.y + 'px';
+        rebuildWires();
+      }
+    }
+  });
+}
+
+function ensureEdge(fromId, toId, event) {
+  const key = `${fromId}→${toId}`;
+  if (!edges.has(key)) {
+    edges.set(key, {from: fromId, to: toId, events: new Set(), pathEl: null});
+    layoutPending = true;
+  }
+  edges.get(key).events.add(event);
+}
+
+async function doLayout() {
+  if (!elk || nodes.size === 0) return;
+  const graph = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': 'RIGHT',
+      'elk.spacing.nodeNode': '40',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '60',
+    },
+    children: [],
+    edges: [],
+  };
+  for (const [id, n] of nodes) {
+    graph.children.push({id, width: n.w, height: n.h});
+  }
+  let ei = 0;
+  for (const [key, e] of edges) {
+    graph.edges.push({id: `e${ei++}`, sources: [e.from], targets: [e.to]});
+  }
+  try {
+    const result = await elk.layout(graph);
+    const pad = 20;
+    for (const child of result.children || []) {
+      const n = nodes.get(child.id);
+      if (!n) continue;
+      n.x = child.x + pad;
+      n.y = child.y + pad;
+      n.w = child.width;
+      n.h = child.height;
+      if (n.el) {
+        n.el.style.left = n.x + 'px';
+        n.el.style.top = n.y + 'px';
+        n.el.style.width = n.w + 'px';
+        n.el.style.height = n.h + 'px';
+      }
+    }
+    rebuildWires();
+  } catch(e) {}
+}
+
+function rebuildWires() {
+  $wires.querySelectorAll('path.wire').forEach(p => p.remove());
+  for (const [key, e] of edges) {
+    const fn = nodes.get(e.from);
+    const tn = nodes.get(e.to);
+    if (!fn || !tn) continue;
+    const ax = fn.x + fn.w;
+    const ay = fn.y + fn.h / 2;
+    const bx = tn.x;
+    const by = tn.y + tn.h / 2;
+    const mx = (ax + bx) / 2;
+    const ns = 'http://www.w3.org/2000/svg';
+    const path = document.createElementNS(ns, 'path');
+    path.classList.add('wire');
+    path.setAttribute('d', `M ${ax} ${ay} C ${mx} ${ay}, ${mx} ${by}, ${bx} ${by}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#25253060');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('marker-end', 'url(#ah)');
+    path.dataset.key = key;
+    $wires.appendChild(path);
+    e.pathEl = path;
+  }
+}
+
+function flashEdge(key, isErr) {
+  const e = edges.get(key);
+  if (!e || !e.pathEl) return;
+  const col = isErr ? '#ff4455' : '#4a9eff';
+  const marker = isErr ? 'url(#ah-r)' : 'url(#ah-b)';
+  gsap.to(e.pathEl, {attr: {stroke: col, 'stroke-width': 3}, duration: 0.15,
+    onComplete: () => gsap.to(e.pathEl, {attr: {stroke: '#25253060', 'stroke-width': 1.5}, duration: 0.8})});
+  e.pathEl.setAttribute('marker-end', marker);
+  setTimeout(() => { if (e.pathEl) e.pathEl.setAttribute('marker-end', 'url(#ah)'); }, 1000);
+
+  const fn = nodes.get(e.from);
+  const tn = nodes.get(e.to);
+  if (fn && fn.el) { fn.el.classList.add(isErr ? 'err' : 'active');
+    setTimeout(() => fn.el.classList.remove('active', 'err'), 800); }
+  if (tn && tn.el) { tn.el.classList.add(isErr ? 'err' : 'active');
+    setTimeout(() => tn.el.classList.remove('active', 'err'), 800); }
+
+  if (e.pathEl) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const dot = document.createElementNS(ns, 'circle');
+    dot.setAttribute('r', '4');
+    dot.setAttribute('fill', col);
+    dot.setAttribute('opacity', '0.9');
+    dot.setAttribute('filter', 'url(#glow)');
+    $wires.appendChild(dot);
+    gsap.to(dot, {
+      motionPath: {path: e.pathEl, align: e.pathEl, alignOrigin: [0.5, 0.5]},
+      duration: 1.0, ease: 'power1.inOut',
+      onComplete: () => gsap.to(dot, {opacity: 0, duration: 0.4,
+        onComplete: () => { try { $wires.removeChild(dot); } catch {} }})
+    });
+  }
+}
+
+function processEntry(d) {
+  const fromComp = d.from || '';
+  const toComp = d.to || '';
+  if (fromComp) ensureNode(fromComp);
+  if (toComp) ensureNode(toComp);
+  if (fromComp && toComp && fromComp !== toComp) {
+    ensureEdge(fromComp, toComp, d.event);
+  }
+
+  addLogRow(d);
+
+  if (fromComp && toComp && fromComp !== toComp) {
+    const key = `${fromComp}→${toComp}`;
+    flashEdge(key, !!d.error);
+  }
+
+  const agent = d.agent || '';
+  if (agent) updateAgentState(agent, d);
+
+  if (d.event === 'annotate_request' && isLive) {
+    const rid = d.request_id || '';
+    if (rid && !pendingAnnotations.has(rid)) {
+      pendingAnnotations.add(rid);
+      handleAnnotation(rid);
+    }
+  }
+}
+
+function updateAgentState(name, entry) {
+  if (!agentState.has(name)) agentState.set(name, {});
+  const st = agentState.get(name);
+  const flds = entry.fields || {};
+  const event = entry.event || '';
+
+  match: {
+    if (event === 'capture_done' && entry.image) { st.raw_image = entry.image; break match; }
+    if (event === 'vlm_forward') {
+      st.system_prompt = flds.system_prompt || st.system_prompt || '';
+      st.user_message = flds.user_message || st.user_message || '';
+      if (entry.image) st.vlm_image = entry.image;
+      st.vlm_reply = '';
+      st.finish_reason = '';
+      break match;
+    }
+    if (event === 'vlm_response') {
+      st.vlm_reply = flds.vlm_reply || '';
+      st.finish_reason = entry.finish_reason || '';
+      break match;
+    }
+    if (event === 'annotate_done' && entry.image) { st.vlm_image = entry.image; break match; }
+    if (event === 'capture_failed' || event === 'capture_empty') {
+      st.last_error = entry.label || event; break match;
+    }
+    if (event === 'annotate_timeout') {
+      st.last_error = entry.label || 'annotate timeout'; break match;
+    }
+    if (event === 'vlm_error') {
+      st.last_error = entry.label || 'vlm error';
+      st.vlm_reply = flds.error_body || flds.error_text || '';
+      st.finish_reason = 'error';
+      break match;
+    }
+  }
+
+  renderAgent(name, st);
+}
+
+function createAgent(name) {
+  if (agentChips.has(name)) return agentChips.get(name);
+  const color = nodeColor(name);
+  const chip = document.createElement('div');
+  chip.className = 'chip agent';
+  chip.style.borderColor = color;
+
+  const head = document.createElement('div');
+  head.className = 'chip-head';
+  const pill = document.createElement('span');
+  pill.className = 'chip-pill';
+  pill.style.background = color + '22';
+  pill.style.color = color;
+  pill.textContent = name;
+  const tsEl = document.createElement('span');
+  tsEl.className = 'chip-ts';
+  const collapseEl = document.createElement('span');
+  collapseEl.className = 'chip-collapse';
+  collapseEl.textContent = '▾';
+  head.append(pill, tsEl, collapseEl);
+
+  const content = document.createElement('div');
+  content.className = 'chip-content';
+
+  const imgs = document.createElement('div');
+  imgs.className = 'imgs';
+  const mkHalf = (tag) => {
+    const h = document.createElement('div');
+    h.className = 'img-half';
+    const t = document.createElement('span');
+    t.className = 'tag'; t.textContent = tag;
+    const img = document.createElement('img'); img.alt = '';
+    const ph = document.createElement('span');
+    ph.className = 'ph'; ph.textContent = '—';
+    h.append(t, img, ph);
+    h.addEventListener('click', () => {
+      if (img.src && img.style.display !== 'none') {
+        $overlayImg.src = img.src;
+        $overlay.style.display = 'flex';
+      }
+    });
+    return {el: h, img, ph};
+  };
+  const rawH = mkHalf('RAW');
+  const vlmH = mkHalf('VLM');
+  imgs.append(rawH.el, vlmH.el);
+
+  const mkPane = (cls, labelText) => {
+    const lbl = document.createElement('div');
+    lbl.className = 'pane-label';
+    lbl.textContent = labelText;
+    const pane = document.createElement('div');
+    pane.className = `pane ${cls}`;
+    const ph = document.createElement('span');
+    ph.className = 'ph'; ph.textContent = '—';
+    pane.appendChild(ph);
+    return {lbl, pane};
+  };
+  const sysP = mkPane('sys', 'SYSTEM PROMPT');
+  const usrP = mkPane('usr', 'USER MESSAGE');
+  const replyP = mkPane('reply', 'VLM REPLY');
+
+  content.append(imgs, sysP.lbl, sysP.pane, usrP.lbl, usrP.pane, replyP.lbl, replyP.pane);
+
+  let collapsed = false;
+  head.addEventListener('click', () => {
+    collapsed = !collapsed;
+    content.classList.toggle('collapsed', collapsed);
+    collapseEl.textContent = collapsed ? '▸' : '▾';
+  });
+
+  chip.append(head, content);
+  $agents.appendChild(chip);
+
+  const refs = {chip, tsEl, rawImg: rawH.img, rawPh: rawH.ph,
+    vlmImg: vlmH.img, vlmPh: vlmH.ph, pSys: sysP.pane, pUsr: usrP.pane,
+    pReply: replyP.pane, color, name};
+  agentChips.set(name, refs);
+  return refs;
+}
+
+function renderAgent(name, st) {
+  const c = createAgent(name);
+  c.tsEl.textContent = new Date().toLocaleTimeString('en-GB', {hour12: false});
+
+  if (st.raw_image) showImg(c.rawImg, c.rawPh, `${PANEL}/images/${st.raw_image}`);
+  if (st.vlm_image) showImg(c.vlmImg, c.vlmPh, `${PANEL}/images/${st.vlm_image}`);
+  setPane(c.pSys, st.system_prompt || '');
+  setPane(c.pUsr, st.user_message || '');
+  setReplyPane(c.pReply, st.vlm_reply || '', st.finish_reason || '');
+
+  if (st.last_error) {
+    c.chip.style.borderColor = 'var(--red)';
+    setTimeout(() => { c.chip.style.borderColor = c.color; }, 2000);
+    st.last_error = '';
+  }
+}
+
+function showImg(imgEl, phEl, src) {
+  imgEl.style.display = 'block'; phEl.style.display = 'none';
+  imgEl.src = src;
+}
+
+function setPane(el, text) {
+  el.textContent = '';
+  if (text) { el.textContent = text; }
+  else { const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = '—'; el.appendChild(ph); }
+}
+
+function setReplyPane(el, text, fr) {
+  setPane(el, text);
+  if (fr) {
+    const b = document.createElement('span');
+    b.className = 'fr-badge ' + (fr === 'stop' ? 'stop' : fr === 'length' ? 'length' : fr === 'error' ? 'error' : 'unknown');
+    b.textContent = fr;
+    el.appendChild(b);
+  }
+}
+
+function formatTs(ts) {
+  if (typeof ts !== 'number') return '';
+  const d = new Date(ts * 1000);
+  return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}.${Math.floor(d.getMilliseconds()/10).toString().padStart(2,'0')}`;
+}
+
+function addLogRow(d) {
+  const row = document.createElement('div');
+  row.className = 'lr' + (d.error ? ' err' : '');
+
+  const ts = document.createElement('span');
+  ts.className = 'lr-t';
+  ts.textContent = formatTs(d.ts);
+
+  const ev = document.createElement('span');
+  ev.className = 'lr-e';
+  ev.textContent = d.event || '';
+
+  const ag = document.createElement('span');
+  ag.className = 'lr-a';
+  ag.textContent = d.agent || '';
+
+  const rid = document.createElement('span');
+  rid.className = 'lr-r';
+  rid.textContent = d.request_id || '';
+
+  const lbl = document.createElement('span');
+  lbl.className = 'lr-l';
+  let labelText = d.label || '';
+  if (d.duration) labelText += ` ${d.duration}s`;
+  if (d.tokens) labelText += ` ${d.tokens}tok`;
+  if (d.image) labelText += ` 📷${d.image}`;
+  lbl.textContent = labelText;
+
+  row.append(ts, ev, ag, rid, lbl);
+
+  if (d.fields && Object.keys(d.fields).length > 0) {
+    const fDiv = document.createElement('div');
+    fDiv.className = 'lr-f';
+    fDiv.textContent = JSON.stringify(d.fields);
+    row.appendChild(fDiv);
+  }
+
+  $logList.appendChild(row);
+  $logList.scrollTop = $logList.scrollHeight;
+}
+
+const drawPoly = (ctx, ov, w, h) => {
+  const N = 1000;
+  const pts = (ov.points||[]).map(p => [(p[0]||0)*w/N, (p[1]||0)*h/N]);
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  if (ov.closed) ctx.closePath();
+  if (ov.fill) { ctx.fillStyle = ov.fill; ctx.fill(); }
+  if (ov.stroke) { ctx.strokeStyle = ov.stroke; ctx.lineWidth = ov.stroke_width||1;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(); }
+  if (ov.label && pts.length > 0) {
+    let cx = 0, cy = 0;
+    for (const p of pts) { cx += p[0]; cy += p[1]; }
+    cx /= pts.length; cy /= pts.length;
+    const fs = Math.max(10, Math.min(w, h) * 0.025);
+    ctx.font = `bold ${fs}px system-ui,sans-serif`;
+    const tw = ctx.measureText(ov.label).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(cx - tw/2 - 3, cy - fs/2 - 3, tw + 6, fs + 6);
+    ctx.fillStyle = ov.stroke || '#ffffff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(ov.label, cx, cy);
+  }
+  ctx.restore();
+};
+
+async function renderAnnotated(imageSrc, overlays) {
+  const img = await new Promise((res, rej) => {
+    const i = new Image(); i.onload = () => res(i); i.onerror = rej;
+    i.crossOrigin = 'anonymous';
+    i.src = imageSrc;
+  });
+  const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
+  const ctx = oc.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  for (const ov of overlays) drawPoly(ctx, ov, img.naturalWidth, img.naturalHeight);
+  const blob = await oc.convertToBlob({type: 'image/png'});
+  const reader = new FileReader();
+  return new Promise(res => {
+    reader.onload = () => res(reader.result.split(',')[1]);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function handleAnnotation(rid) {
+  try {
+    const resp = await fetch(`${PANEL}/annotate-request?rid=${rid}`);
+    if (!resp.ok) { pendingAnnotations.delete(rid); return; }
+    const data = await resp.json();
+    const imageSrc = `${PANEL}/images/${data.image}`;
+    const overlays = data.overlays || [];
+    let resultB64;
+    if (overlays.length > 0) {
+      resultB64 = await renderAnnotated(imageSrc, overlays);
+    } else {
+      const imgResp = await fetch(imageSrc);
+      const blob = await imgResp.blob();
+      const reader = new FileReader();
+      resultB64 = await new Promise(res => {
+        reader.onload = () => res(reader.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+    }
+    await fetch(`${PANEL}/result`, {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({request_id: rid, image_b64: resultB64})});
+  } catch(e) {}
+  pendingAnnotations.delete(rid);
+}
+
+async function fetchBatches() {
+  try {
+    const resp = await fetch(`${PANEL}/logs`);
+    const data = await resp.json();
+    allBatches = data.batches || [];
+  } catch(e) {}
+}
+
+async function pollLogs() {
+  if (allBatches.length === 0) {
+    await fetchBatches();
+    if (allBatches.length === 0) return;
+    pollCursor.batch = allBatches[0];
+    pollCursor.line = 0;
+  }
+
+  try {
+    const resp = await fetch(`${PANEL}/logs?batch=${pollCursor.batch}&after=${pollCursor.line}`);
+    const data = await resp.json();
+    const lines = data.lines || [];
+
+    for (const entry of lines) {
+      processEntry(entry);
+      pollCursor.line++;
+    }
+
+    if (lines.length === 0) {
+      await fetchBatches();
+      const curIdx = allBatches.indexOf(pollCursor.batch);
+      if (curIdx >= 0 && curIdx < allBatches.length - 1) {
+        pollCursor.batch = allBatches[curIdx + 1];
+        pollCursor.line = 0;
+      }
+    }
+  } catch(e) {}
+
+  if (layoutPending) {
+    layoutPending = false;
+    await doLayout();
+  }
+}
+
+$overlay.addEventListener('click', () => { $overlay.style.display = 'none'; });
+
+const es = new EventSource(`${PANEL}/events`);
+es.addEventListener('connected', () => {
+  $cdot.classList.add('live');
+  isLive = true;
+  pollLogs();
+});
+es.addEventListener('update', () => {
+  pollLogs();
+});
+es.onerror = () => {
+  $cdot.classList.remove('live');
+  isLive = false;
+};
+
+setInterval(() => { pollLogs(); }, 3000);
+
+const resizeObs = new ResizeObserver(() => { if (nodes.size > 0) doLayout(); });
+resizeObs.observe($diagramBody);
+</script>
+</body>
+</html>
